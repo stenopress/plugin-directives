@@ -1,5 +1,5 @@
 {
-  "name": "@steno/plugin-shortcodes",
+  "name": "@steno/plugin-directives",
   "version": "0.1.0",
   "exports": {
     ".": "./mod.ts"
