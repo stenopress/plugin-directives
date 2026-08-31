@@ -1,110 +1,95 @@
-# @steno/plugin-shortcodes
+# @steno/plugin-directives
 
-Shortcode plugin for [Steno](https://github.com/steno/steno) that ports Zola/Tera-style shortcodes
-to Steno's Markdown pipeline: a `:::name{args}` fenced-container directive, parsed via `transformAst`
-and rendered to HTML per-shortcode. Ships 11 common shortcodes out of the box, covering the kind of
-embeds and callouts most content-heavy themes end up needing.
+Directive-syntax plugin for [Steno](https://github.com/steno/steno): a `::name{args}` (void) /
+`:::name{args} ... :::` (block) Markdown directive engine - the same convention
+[`remark-directive`](https://github.com/micromark/micromark-extension-directive) and reStructuredText
+directives use. This plugin supplies only the parsing and dispatch engine; it ships with **zero
+built-in directives**. A theme or site registers its own render functions for whatever names it
+wants to support.
 
-This is for a site migrating from Zola, or any theme wanting shortcode-style embeds without writing
-its own Markdown-token transform. Zola's shortcode system (a template macro called from inside
-Markdown, e.g. `{{ youtube(id="...") }}`) has no equivalent in Tau/`marked` - Tau components can't be
-invoked from Markdown source, and there's no built-in directive syntax - so this plugin defines one.
+This is for the one capability Steno's own architecture has no other way to provide: an embed -
+an alert box, a video, anything - written directly inside a Markdown content file's body. Steno
+splits rendering into two separate stages (`marked` compiles Markdown to HTML first, then Tau
+templates the page around that already-finished HTML), so a native Tau `<Component>` can never be
+invoked from inside a post's Markdown source - Tau never sees that source at all, only the HTML
+`marked` already produced. This plugin is the only place in the pipeline that reads the raw
+Markdown before that happens.
 
 ## Installation
 
 ```yaml
 # content/.steno/config.yml
 plugins:
-  - jsr:@steno/plugin-shortcodes
+  - jsr:@steno/plugin-directives
 ```
 
 ## Options
 
 ```yaml
 plugins:
-  - package: jsr:@steno/plugin-shortcodes
-    options:
-      enable: [alert, audio, crt, emoji, icon, image, mastodon, overflow_auto, video, vimeo, youtube]
-      fediverseHost: example.social
-      fediverseUser: someone
+  - package: jsr:@steno/plugin-directives
+    # options.directives is a map of render functions, so it's set from TypeScript
+    # (see below), not declared inline in YAML.
 ```
 
-| Option          | Type                                                                     | Default      | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| --------------- | -------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `enable`        | `string[]`                                                                | all 11 below | Restrict to a subset; unknown directive names outside this list are left as literal text rather than erroring, so a stray `:::` in prose doesn't break the build.                                                                                                                                                                                                                                                                                            |
-| `emoji`         | `boolean`                                                                 | `true`       | When `false`, removes `emoji` from the enabled set even if it's listed in `enable` - set this if a site prefers wiring [`marked-emoji`](https://jsr.io/@lambdalisue/marked-emoji) in directly instead.                                                                                                                                                                                                                                                       |
-| `iconResolver`  | `(name: string) => string \| undefined \| Promise<string \| undefined>` | none         | Resolves an icon name to raw SVG markup for the `icon` shortcode and any shortcode that embeds one internally (`audio`'s speaker icon, `alert`'s background icon). This plugin only defines the hook, a theme or site supplies the actual filesystem lookup. Without one, icon output falls back to a bare `<i class="icon {name}"></i>` with no inlined SVG data.                                                                                          |
-| `emojiResolver` | `(name: string) => string \| undefined \| Promise<string \| undefined>` | none         | Resolves a custom-emoji shortcode name to an image URL - stands in for a live remote API call, which is infeasible inside a synchronous Markdown transform. Without one, `::emoji{name="..."}` falls back to the literal `:name:` text.                                                                                                                                                                                                                     |
-| `fediverseHost` | `string`                                                                  | none         | Default `host` for `mastodon` when the attribute is omitted.                                                                                                                                                                                                                                                                                                                                                                                                  |
-| `fediverseUser` | `string`                                                                  | none         | Default `user` for `mastodon` when the attribute is omitted.                                                                                                                                                                                                                                                                                                                                                                                                  |
+| Option       | Type                                 | Default | Description                                                                                                                                                                           |
+| ------------ | ------------------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `directives` | `Record<string, DirectiveRenderer>`   | `{}`    | Render functions keyed by directive name. A name with no entry here is left untouched as literal Markdown text rather than erroring, so a stray `:::` in prose never breaks a build. |
 
-Since this plugin has no filesystem access of its own, a theme or site wires up `iconResolver` (and
-optionally `emojiResolver`) in TypeScript rather than YAML:
+A theme or site registers its directives in TypeScript, since a render function isn't expressible in
+YAML:
 
 ```ts
-import shortcodes from "jsr:@steno/plugin-shortcodes";
+import directives from "jsr:@steno/plugin-directives";
 
-const plugin = shortcodes({
-  iconResolver: async (name) => {
-    // a theme's own site-override-then-theme-fallback icon lookup
-    return (
-      await tryReadTextFile(`icons/${name}.svg`) ??
-        await tryReadTextFile(`theme/icons/${name}.svg`)
-    );
+const plugin = directives({
+  directives: {
+    youtube: (attrs) =>
+      `<iframe src="https://www.youtube-nocookie.com/embed/${attrs.id}"></iframe>`,
+    alert: (attrs, body) =>
+      `<div class="alert alert-${attrs.type}">${body?.html ?? ""}</div>`,
   },
 });
 ```
 
 ## How it works
 
-1. `transformAst` walks `marked`'s token list looking for `::name{...}` (void, self-closing, no body,
-   mirrors Zola's `{{ shortcode() }}`) and `:::name{...} ... :::` (block, wraps content, mirrors
-   Zola's `{% shortcode() %} ... {% end %}`). Attribute syntax is `key="value"` / `key=true` /
-   `key=123`, comma or whitespace-separated.
-2. A matched directive is replaced with a single synthetic `html` token containing that shortcode's
-   rendered output. A block directive's body is recursively re-lexed and re-rendered as nested
-   Markdown, so nested directives and inline emphasis both work - except `crt`, whose body is kept
-   as literal preformatted text, since running ASCII art through the Markdown parser would mangle
-   `**`/`_` characters that are part of the art.
-3. An unmatched, unknown, or unclosed directive is left as its original tokens, verbatim - a stray
-   `:::` in prose never breaks a build.
+1. `transformAst` walks `marked`'s token list looking for `::name{...}` (void, self-closing, no
+   body) and `:::name{...} ... :::` (block, wraps content). Attribute syntax is `key="value"` /
+   `key=true` / `key=123`, comma or whitespace-separated.
+2. When `name` has an entry in `directives`, the matched tokens are replaced with a single
+   synthetic `html` token containing that renderer's output. A block directive's body is
+   recursively re-lexed and re-rendered as nested Markdown before the renderer runs, so nested
+   directives and inline emphasis both work - the renderer receives it as `body.html`, alongside
+   the unrendered source as `body.raw` in case it wants that instead (verbatim ASCII art, for
+   example, where running it through the Markdown parser would mangle `**`/`_` characters that are
+   part of the art rather than emphasis markup).
+3. When `name` has no entry, the original tokens are left exactly as written, verbatim - a stray
+   `:::` in prose, or a directive name a theme hasn't registered yet, never breaks a build.
 
 ```markdown
-:::youtube{id="dQw4w9WgXcQ"}
-:::
-
 :::alert{type="warning"}
 Body content, itself rendered as Markdown.
 :::
 
-::icon{name="star" inline=true}
+::youtube{id="dQw4w9WgXcQ"}
 ```
 
-### Shortcodes covered
+A single renderer can handle both the void and block form of its own name - it's called with
+`body` set only for a block invocation, `undefined` for a void one, and can branch on that if it
+wants to support both shapes.
 
-| Name            | Kind  | Notes                                                                                                        |
-| --------------- | ----- | ------------------------------------------------------------------------------------------------------------- |
-| `alert`         | block | note/tip/important/warning/danger callout (`type="..."` picks a preset; `color`/`icon`/`title` override it)  |
-| `audio`         | void  | custom `<button data-audio>` player trigger, with an embedded speaker icon                                   |
-| `crt`           | block | CRT-effect wrapper; body is kept as literal preformatted text, not re-parsed as Markdown                     |
-| `emoji`         | void  | `path` renders a local image; `name` (custom emoji lookup) needs an `emojiResolver`                          |
-| `icon`          | void  | inline icon by name - needs an `iconResolver` for real SVG data                                              |
-| `image`         | void  | captioned image; `url`/`url_min` are passed through as-is (no asset resolution)                              |
-| `mastodon`      | void  | Fediverse post embed; `host`/`user` fall back to the `fediverseHost`/`fediverseUser` options when omitted    |
-| `overflow_auto` | block | horizontal-scroll wrapper                                                                                    |
-| `video`         | void  | native `<video>`                                                                                             |
-| `vimeo`         | void  | Vimeo embed                                                                                                  |
-| `youtube`       | void  | YouTube (nocookie) embed                                                                                     |
+## Helpers for writing a renderer
 
-### Design notes
+Small, generic utilities exported alongside the plugin, useful for any `DirectiveRenderer`:
 
-- `icon` / `alert`'s icon / `audio`'s speaker icon need real SVG file data. This plugin has no
-  filesystem access of its own, so it accepts an `iconResolver` option function instead.
-- `emoji{name="..."}` needs a live HTTP call to whatever service hosts the custom emoji, which is
-  infeasible inside a synchronous Markdown-token transform, hence `emojiResolver`. `emoji{path="..."}`
-  (local image) needs no resolver and works directly.
-- `image` passes `url`/`url_min` through unmodified - pair this plugin with `@steno/plugin-image` and
-  pass it already-resolved URLs as shortcode attributes if asset processing is needed.
+| Export | Signature | Description |
+|---|---|---|
+| `escapeHtml` | `(value: unknown) => string` | Escapes `&`, `<`, `>`, `"`, `'` for safe inclusion in HTML text or a quoted attribute. |
+| `attrString` | `(attrs, key) => string \| undefined` | Reads an attribute as a string. |
+| `attrBool` | `(attrs, key) => boolean` | Reads an attribute as a boolean flag. |
+| `classAttr` | `(classes: string[]) => string` | Builds a ` class="..."` fragment (including the leading space), or `""` when empty. |
+| `parseAttributes` | `(source: string) => Attributes` | The `{...}` attribute parser itself, exported in case a renderer wants to parse attributes from somewhere else. |
 
 ## Test
 
@@ -115,8 +100,8 @@ deno task test
 ## Learn more
 
 - [Steno plugin development guide](https://github.com/stenopress/steno/blob/main/docs/plugins.md)
-- [Tau syntax reference](https://github.com/stenopress/steno/blob/main/docs/tau_syntax.md) - `{@children}` is what a shortcode's *theme-side* wrapper component would use once this plugin hands it rendered HTML
-- [Zola shortcodes documentation](https://www.getzola.org/documentation/content/shortcodes/) - the feature set this plugin's directive syntax is modeled on
+- [Tau syntax reference](https://github.com/stenopress/steno/blob/main/docs/tau_syntax.md) - Tau's own `<Component>`/`{@children}` syntax, the template-layer counterpart to this plugin's content-layer directives
+- [`remark-directive`](https://github.com/micromark/micromark-extension-directive) - the Markdown-ecosystem convention this directive syntax follows
 
 ## License
 
