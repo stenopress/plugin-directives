@@ -21,7 +21,8 @@
     "jsr:@steno/core@0.1.0": "0.1.0",
     "jsr:@steno/steno@0.13": "0.13.0",
     "jsr:@steno/tau@0.9.0": "0.9.0",
-    "npm:marked@18.0.11": "18.0.11"
+    "npm:marked@18.0.11": "18.0.11",
+    "npm:marked@18.1.0": "18.1.0"
   },
   "jsr": {
     "@deno/cache-dir@0.13.2": {
@@ -107,7 +108,7 @@
         "jsr:@std/toml",
         "jsr:@std/yaml",
         "jsr:@steno/tau",
-        "npm:marked"
+        "npm:marked@18.0.11"
       ]
     },
     "@steno/steno@0.13.0": {
@@ -129,13 +130,17 @@
     "marked@18.0.11": {
       "integrity": "sha512-HnslJfsZkRPBDJRHvVtAaWlZHEpSu7u8LgQuJCELjRKuWR+hpq4A7sLq3p8HaI9ypVoXDXxV34CsQJEe1+J5Aw==",
       "bin": true
+    },
+    "marked@18.1.0": {
+      "integrity": "sha512-PamYXWWWg2nboG3oX5Ffzpy3EFZROqZJK9hSlMmUnekp7TxPs5DcT95vwd46m73/exfKCRVMtgXoPMI4FEJL6w==",
+      "bin": true
     }
   },
   "workspace": {
     "dependencies": [
       "jsr:@std/assert@1.0.19",
       "jsr:@steno/steno@0.13",
-      "npm:marked@18.0.11"
+      "npm:marked@18.1.0"
     ]
   }
 }
