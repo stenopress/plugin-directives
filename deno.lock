@@ -22,7 +22,7 @@
     "jsr:@steno/steno@0.14": "0.14.0",
     "jsr:@steno/tau@0.9.0": "0.9.0",
     "npm:marked@18.0.11": "18.0.11",
-    "npm:marked@18.1.1": "18.1.1"
+    "npm:marked@18.2.0": "18.2.0"
   },
   "jsr": {
     "@deno/cache-dir@0.13.2": {
@@ -131,8 +131,8 @@
       "integrity": "sha512-HnslJfsZkRPBDJRHvVtAaWlZHEpSu7u8LgQuJCELjRKuWR+hpq4A7sLq3p8HaI9ypVoXDXxV34CsQJEe1+J5Aw==",
       "bin": true
     },
-    "marked@18.1.1": {
-      "integrity": "sha512-zEGgrtUG8crk+TrMacJSVABU4DYDDkS8uqgU3ohrn/2fW9C2AEfUrO3m6IhpIpQpl7YcVpiXXC9cSMWDANT3dg==",
+    "marked@18.2.0": {
+      "integrity": "sha512-KaeL+tAbtvI930q7HE2PN5lYXYdT8EiSmxHlN6F3rsfb57wd5mp5W5TLazpdj4inTQBJdgjYwbs40W/0VUGU+Q==",
       "bin": true
     }
   },
@@ -140,7 +140,7 @@
     "dependencies": [
       "jsr:@std/assert@1.0.19",
       "jsr:@steno/steno@0.14",
-      "npm:marked@18.1.1"
+      "npm:marked@18.2.0"
     ]
   }
 }
